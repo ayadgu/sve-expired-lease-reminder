@@ -1,0 +1,102 @@
+Lancement de l'application, veuillez patienter...
+   Numero Mandat            Nom Locataire                  Type Bail    Fin Bail
+6   00046-001-06           GILLES & LEWIS  B Bail Loi 06.07.89 3 ans  04/11/2022
+8   00051-001-03  VICENTE TEXEIRA Eugénia  B Bail Loi 06.07.89 3 ans  31/10/2022
+13  00113-001-02         HEBERT & BUTHAUD               4 Commercial  31/10/2007
+16  00134-002-03                   GAULON           0 Code Civil ICC  18/10/2022
+18  00137-001-02          KAMAL Az Addyne               4 Commercial  02/12/2018
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+expired_bails_daily : 
+ +---------------+---------------+-----------+----------+
+| Numéro Mandat | Nom Locataire | Type Bail | Date Fin |
++---------------+---------------+-----------+----------+
++---------------+---------------+-----------+----------+
+expired_bails_monthly : 
+ +---------------+-----------------------------+--------------------------------+------------+
+| Numéro Mandat |        Nom Locataire        |           Type Bail            |  Date Fin  |
++---------------+-----------------------------+--------------------------------+------------+
+|  00046-001-06 |        GILLES & LEWIS       |   B Bail Loi 06.07.89 3 ans    | 04/11/2022 |
+|  00051-001-03 |   VICENTE TEXEIRA Eugénia   |   B Bail Loi 06.07.89 3 ans    | 31/10/2022 |
+|  00113-001-02 |       HEBERT & BUTHAUD      |          4 Commercial          | 31/10/2007 |
+|  00134-002-03 |            GAULON           |        0 Code Civil ICC        | 18/10/2022 |
+|  00137-001-02 |       KAMAL Az Addyne       |          4 Commercial          | 02/12/2018 |
+|  00147-006-01 |             ISEL            |   C Bail Loi 06.07.89 6 ans    | 14/12/2022 |
+|  00198-004-02 |     EMIRATS ARABES UNIS     |        0 Code Civil ICC        | 30/11/2022 |
+|  00203-001-01 |    SURFACE VOLUME ESPACE    |          4 Commercial          | 13/12/2019 |
+|  00218-001-03 |           VAIDEANU          |        0 Code Civil ICC        | 16/12/2022 |
+|  00236-002-01 |         DASSE INGRID        |   B Bail Loi 06.07.89 3 ans    | 03/11/2022 |
+|  00237-001-01 |            DA LUZ           |   C Bail Loi 06.07.89 6 ans    | 13/12/2022 |
+|  00245-001-00 |      HAIR ST HONORE -       |          4 Commercial          | 30/06/2019 |
+|  00245-002-00 |   SIDEC - CHAUSSURE GABOR   |          4 Commercial          | 31/12/2020 |
+|  00245-009-00 |        BEAUBIAT ALAIN       |          4 Commercial          | 04/04/2022 |
+|  00249-001-02 |         SERVICES PJM        | G Bail Derog. (art L.145-5 cc) | 31/08/2022 |
+|  00252-003-02 |         SERVICES PJM        | G Bail Derog. (art L.145-5 cc) | 31/07/2022 |
+|  00267-002-04 |        VINCENT Anais        |        0 Code Civil ICC        | 01/10/2022 |
+|  00277-001-00 | BELGUENBOUR Nacim & DOWKIW  |   B Bail Loi 06.07.89 3 ans    | 04/11/2022 |
+|  00278-001-00 |            OUNAS            |        0 Code Civil ICC        | 03/12/2022 |
+|  00613-001-02 |   CONSEIL GENERAL DES HDS   |          4 Commercial          | 31/01/2011 |
+|  00613-002-02 |   CONSEIL GENERAL DES HDS   |          4 Commercial          | 31/01/2011 |
+|  00613-007-00 |   CONSEIL GENERAL DES HDS   |          4 Commercial          | 30/01/2020 |
+|  00668-001-01 |       CRECHE ET MALICE      |          4 Commercial          | 14/03/2022 |
+|  00670-001-01 |        GOLF EN VILLE        |          4 Commercial          | 31/12/2018 |
+|  00670-002-00 |   GARNIER - ECOLE GAN ALEF  |          4 Commercial          | 31/05/2021 |
+|  00670-003-00 |   GARNIER - ECOLE GAN ALEF  |          4 Commercial          | 31/05/2021 |
+|  00670-004-00 |   GARNIER - ECOLE GAN ALEF  |          4 Commercial          | 31/05/2021 |
+|  00670-005-00 |   GARNIER - ECOLE GAN ALEF  |          4 Commercial          | 31/05/2021 |
+|  00670-006-01 |            ESSCA            |          4 Commercial          | 30/06/2022 |
+|  00675-006-00 |            ESSCA            |          4 Commercial          | 16/07/2022 |
+|  00681-005-00 |           LIENART           |          4 Commercial          | 31/10/2019 |
+|  00681-006-00 |       AUTHENTIC MEDIA       |          4 Commercial          | 31/07/2021 |
+|  00684-001-00 |    THEATRE SAINT GEORGES    |          4 Commercial          | 30/09/2020 |
+|  00684-002-00 |       PIGMENT GRAFITI       |          4 Commercial          | 31/10/2018 |
+|  00684-007-00 |            HERDIA           |          4 Commercial          | 30/09/2018 |
+|  00684-008-00 |            HERDIA           |          4 Commercial          | 30/09/2018 |
+|  00684-010-00 |             JDA             |          4 Commercial          | 14/07/2020 |
+|  00685-004-00 |  DEPARTEMENT DES HAUTS DE   |          4 Commercial          | 30/06/2012 |
+|  00685-014-00 |  DEPARTEMENT DES HAUTS DE   |          4 Commercial          | 30/06/2018 |
+|  00686-011-00 |          BRAINWAVE          |          4 Commercial          | 19/02/2021 |
++---------------+-----------------------------+--------------------------------+------------+
+False first day
+self.found_expired_lease_monthly True
+self.found_expired_lease_daily False
+24/05/2022
+send mail
