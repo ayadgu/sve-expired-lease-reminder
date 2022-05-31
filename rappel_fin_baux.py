@@ -211,9 +211,7 @@ class ReminderBot():
         with smtplib.SMTP(SMTP, port=587) as smtp:
             smtp.starttls(context=context)
             smtp.login(self.EMAIL_OUTLOOK, self.PASSWORD_OUTLOOK)
-            
             smtp.ehlo()
-
             smtp.send_message(msg)
             smtp.quit()
 
