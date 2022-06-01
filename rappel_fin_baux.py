@@ -1,6 +1,7 @@
 import re
 import glob
 import pandas as pd
+import numpy as np
 from datetime import datetime, timedelta, date
 import smtplib, ssl
 from email.message import EmailMessage
@@ -31,8 +32,6 @@ class ReminderBot():
         self.EMAIL_OUTLOOK=os.environ.get("EMAIL_OUTLOOK")
         self.EMAIL_DEST=os.environ.get("EMAIL_DEST")
 
-        self.found_expired_lease_monthly=False
-        self.found_expired_lease_daily=False
         
 
     def initDataFrame(self):
@@ -41,9 +40,33 @@ class ReminderBot():
         pd.set_option('display.width', None)
 
         #--------------------------
-        # DF Fichier Code
-                
-        filename=glob.glob("*baux*.xlsx")[0]
+        # DF Fichier Adresse des baux
+        filename=glob.glob("*adresse*.xlsx")[0]
+        df_adresse_baux = pd.read_excel(filename, header= None)
+
+        col_adresse_bail =  'Adresse Bail'
+        col_numero_bail =  'Numero Mandat'
+
+        df_adresse_baux=df_adresse_baux.rename(columns={1: col_numero_bail})
+        df_adresse_baux=df_adresse_baux.rename(columns={6: col_adresse_bail})
+        df_adresse_baux[col_adresse_bail] = df_adresse_baux[col_adresse_bail].astype(str)
+
+        df_adresse_baux.replace("Indicatif",np.nan,regex=True,inplace=True)
+        df_adresse_baux.replace("Entré le",np.nan,regex=True,inplace=True)
+        df_adresse_baux.replace("nan",np.nan,regex=True,inplace=True)
+        df_adresse_baux = df_adresse_baux[df_adresse_baux[col_adresse_bail].notna()]
+
+        df_adresse_baux_min=pd.concat([df_adresse_baux[col_numero_bail],df_adresse_baux[col_adresse_bail]], axis=1)
+        df_adresse_baux_min[col_numero_bail].ffill(inplace=True)
+        df_adresse_baux_min.dropna(inplace=True)
+        df_adresse_baux_min=df_adresse_baux_min.groupby([col_numero_bail], as_index=False).agg({col_adresse_bail: ' '.join})
+        df_adresse_baux_min[col_adresse_bail]=df_adresse_baux_min[[col_adresse_bail,col_numero_bail]].groupby([col_numero_bail], as_index=False)[col_adresse_bail].transform(lambda x: ','.join(x))
+        
+        self.df_adresse_baux = df_adresse_baux_min
+
+        #--------------------------
+        # DF Fichier Situation des baux
+        filename=glob.glob("*tuation*.xlsx")[0]
         df_fichier_baux = pd.read_excel(filename, header= None)
 
         c_time = os.path.getctime(filename)
@@ -70,13 +93,20 @@ class ReminderBot():
 
         df_fichier_baux = df_fichier_baux[df_fichier_baux[col_fin_bail].notna()]
         df_fichier_baux = df_fichier_baux[df_fichier_baux[col_numero_bail].notna()]
-        # print(tabulate(df_fichier_baux, headers='keys', tablefmt='psql'))
-        # print(df_fichier_baux[col_nom_locataire])
 
-        df_new_df=pd.concat([df_fichier_baux[col_numero_bail],df_fichier_baux[col_nom_locataire],df_fichier_baux[col_type_bail],df_fichier_baux[col_fin_bail]], axis=1)
-        print(df_new_df.head(5))
+        df_situation_des_baux=pd.concat([df_fichier_baux[col_numero_bail],df_fichier_baux[col_nom_locataire],df_fichier_baux[col_type_bail],df_fichier_baux[col_fin_bail]], axis=1)
+        print(df_situation_des_baux.head(5))
         
-        self.df_new_df = df_new_df
+        self.df_situation_des_baux = df_situation_des_baux
+
+        inner_join = pd.merge(df_situation_des_baux, 
+                            df_adresse_baux_min, 
+                            on =col_numero_bail, 
+                            how ='inner')
+
+        self.inner_join=inner_join
+
+        
 
     def send_mail(self):
         text = f"""
@@ -91,103 +121,24 @@ class ReminderBot():
         """
 
         html = f"""
-        <html><body>
-        <p>Ceci est un message automatique.</p>
-        
-        <h3>Baux bientôt expirés depuis aujourd'hui exactement :</h3>
-        {self.expired_bails_daily.get_html_string()}
-        <br/>
-        <h3>Baux bientôt ou déjà expirés à ce jour :</h3>
-        {self.expired_bails_monthly.get_html_string()}
-        <br/>
-        <p>Le fichier Excel <b>{self.path_fichier_excel}</b> utilisé pour ce rappel date du <b>{self.date_fichier_excel}</b>.</p> 
-        <p>
-        Pensez à le mettre à jour de temps en temps pour continuer à recevoir des rappels pertinents.
-        </br>Pour cela, passez par le menu <b>Quittancement</b> > <b>Révision des baux</b> depuis Gercop. 
-        </br>Le fichier extrait sera de type .xls, ouvrez-le puis enregistrez-le sous format .xlsx et écrasez le fichier excel actuellement utilisé.
-
-        <table style="display:none;">
-            <tr>
-                <th>Code</th>
-                <th>Signification</th>
-            </tr>
-            <tr>
-                <td>0</td>
-                <td>Code Civil ICC</td>
-            </tr>
-            <tr>
-                <td>1</td>
-                <td>Loi Quillot 3 ans</td>
-            </tr>
-            <tr>
-                <td>2</td>
-                <td>Loi Quillot 6 ans</td>
-            </tr>
-            <tr>
-                <td>3</td>
-                <td>Meublé</td>
-            </tr>
-            <tr>
-                <td>4</td>
-                <td>Commercial</td>
-            </tr>
-            <tr>
-                <td>5</td>
-                <td>Professionnel</td>
-            </tr>
-            <tr>
-                <td>6</td>
-                <td>Loi de 48</td>
-            </tr>
-            <tr>
-                <td>7</td>
-                <td>Bail de 6 ans</td>
-            </tr>
-            <tr>
-                <td>8</td>
-                <td>Bail Mehaignerie 3 ans</td>
-            </tr>
-            <tr>
-                <td>9</td>
-                <td>Bail Mehaignerie 8 ans</td>
-            </tr>
-            <tr>
-                <td>A</td>
-                <td>Bail Mehaignerie 6 ans</td>
-            </tr>
-            <tr>
-                <td>B</td>
-                <td>Bail Loi 06.07.89 3 ans</td>
-            </tr>
-            <tr>
-                <td>C</td>
-                <td>Bail Loi 06.07.89 6 ans</td>
-            </tr>
-            <tr>
-                <td>D</td>
-                <td>Bail Loi 07.89 3 ans 1/6</td>
-            </tr>
-            <tr>
-                <td>E</td>
-                <td>Bail comm. Dg Non Revisable</td>
-            </tr>
-            <tr>
-                <td>F</td>
-                <td>Bail SRU</td>
-            </tr>
-            <tr>
-                <td>G</td>
-                <td>Bail Derog. (art L.145-5 cc)</td>
-            </tr>
-            <tr>
-                <td>H</td>
-                <td>Code Civil IRL</td>
-            </tr>
-        </table>
-
-        </p>
-        <p>Bonne journée !</p>
-        </body></html>
+        <html>
+            <body>
+                <p>Ceci est un message automatique.</p>
+                <h3>Baux bientôt expirés depuis aujourd'hui exactement :</h3>
+                {self.expired_bails_daily.get_html_string()}
+                <br/>
+                <h3>Baux bientôt ou déjà expirés à ce jour :</h3>
+                {self.expired_bails_monthly.get_html_string()}
+                <br/>
+                <p>Le fichier Excel <b>{self.path_fichier_excel}</b> utilisé pour ce rappel date du <b>{self.date_fichier_excel}</b>.</p>
+                <p>
+                    Pensez à le mettre à jour de temps en temps pour continuer à recevoir des rappels pertinents.
+                    </br>Pour cela, passez par le menu <b>Quittancement</b> > <b>Révision des baux</b> depuis Gercop. 
+                    </br>Le fichier extrait sera de type .xls, ouvrez-le puis enregistrez-le sous format .xlsx et écrasez le fichier excel actuellement utilisé.
+                </p>
+                <p>Bonne journée !</p>
+            </body>
+            </html>
         """
         text=html
         msg = MIMEMultipart('alternative')
@@ -196,7 +147,6 @@ class ReminderBot():
         msg["Subject"] = "Rappel automatique - Baux bientôt arrivés à expiration"
         msg["From"] = self.EMAIL_OUTLOOK
         msg["To"] = self.EMAIL_DEST
-
 
         SMTP = "smtp-mail.outlook.com"
         context=ssl.create_default_context()
@@ -216,20 +166,33 @@ class ReminderBot():
             smtp.quit()
 
     def apply(self):
+        # Init PrettyTable
         expired_bails_monthly = PrettyTable()
         expired_bails_daily = PrettyTable()
 
-        expired_bails_monthly.field_names  = ["Numéro Mandat","Nom Locataire","Type Bail","Date Fin"]
-        expired_bails_daily.field_names  = ["Numéro Mandat","Nom Locataire","Type Bail","Date Fin"]
+        # Naming Head
+        expired_bails_monthly.field_names  = ["Numéro Mandat","Nom Locataire","Adresse Bail","Type Bail","Date Fin"]
+        expired_bails_daily.field_names  = ["Numéro Mandat","Nom Locataire","Adresse Bail","Type Bail","Date Fin"]
+        
+        # Sorting 
+        expired_bails_monthly.sortby = 'Date Fin'
+        expired_bails_daily.sortby = 'Date Fin'
+        # Sorting 
+        expired_bails_monthly.align = 'r'
+        expired_bails_daily.align = 'r'
 
-        for indices, row in self.df_new_df.iterrows():
-            date = self.df_new_df.at[indices,"Fin Bail"]
+        found_expired_lease_monthly=False
+        found_expired_lease_daily=False
+
+        for indices, row in self.inner_join.iterrows():
+            date = self.inner_join.at[indices,"Fin Bail"]
             date = datetime.strptime(date, '%d/%m/%Y')
             print("")
-            numero_bail = self.df_new_df.at[indices,"Numero Mandat"]
-            nom_locataire = self.df_new_df.at[indices,"Nom Locataire"]
-            type_bail = str(self.df_new_df.at[indices,"Type Bail"])
-            empty_row=["Aucun"]*len(self.df_new_df.columns)
+            numero_bail = self.inner_join.at[indices,"Numero Mandat"]
+            nom_locataire = self.inner_join.at[indices,"Nom Locataire"]
+            adresse_locataire = self.inner_join.at[indices,"Adresse Bail"]
+            type_bail = str(self.inner_join.at[indices,"Type Bail"])
+            empty_row=["Aucun"]*len(self.inner_join.columns)
 
             match type_bail :
                 # #########
@@ -239,21 +202,21 @@ class ReminderBot():
                 
                 case '4':
                     if self.today_date == date or self.today_date > date + self.three_years-self.six_months:
-                        self.found_expired_lease_monthly=True
-                        expired_bails_monthly.add_row([numero_bail,nom_locataire,type_bail,date.strftime('%d/%m/%Y')])
+                        found_expired_lease_monthly=True
+                        expired_bails_monthly.add_row([numero_bail,nom_locataire,adresse_locataire,type_bail,date.strftime('%d/%m/%Y')])
                     
                     if self.today_date == date or self.today_date == date + self.three_years-self.six_months:
-                        self.found_expired_lease_daily=True
-                        expired_bails_daily.add_row([numero_bail,nom_locataire,type_bail,date.strftime('%d/%m/%Y')])
+                        found_expired_lease_daily=True
+                        expired_bails_daily.add_row([numero_bail,nom_locataire,adresse_locataire,type_bail,date.strftime('%d/%m/%Y')])
                 
                 case _:
                     if self.today_date > date-self.height_months:
-                        self.found_expired_lease_monthly=True
-                        expired_bails_monthly.add_row([numero_bail,nom_locataire,type_bail,date.strftime('%d/%m/%Y')])
+                        found_expired_lease_monthly=True
+                        expired_bails_monthly.add_row([numero_bail,nom_locataire,adresse_locataire,type_bail,date.strftime('%d/%m/%Y')])
                         
                     if self.today_date == date-self.height_months:
-                        self.found_expired_lease_daily=True
-                        expired_bails_daily.add_row([numero_bail,nom_locataire,type_bail,date.strftime('%d/%m/%Y')])
+                        found_expired_lease_daily=True
+                        expired_bails_daily.add_row([numero_bail,nom_locataire,adresse_locataire,type_bail,date.strftime('%d/%m/%Y')])
 
         self.expired_bails_monthly=expired_bails_monthly
         self.expired_bails_daily=expired_bails_daily
@@ -262,18 +225,18 @@ class ReminderBot():
         print("expired_bails_monthly : \n",self.expired_bails_monthly)
         print(self.today_date.day == 1, "first day")
 
-        print("self.found_expired_lease_monthly",self.found_expired_lease_monthly)
-        print("self.found_expired_lease_daily",self.found_expired_lease_daily)
+        print("found_expired_lease_monthly",found_expired_lease_monthly)
+        print("found_expired_lease_daily",found_expired_lease_daily)
 
-        if not self.found_expired_lease_daily :
+        if not found_expired_lease_daily :
             self.expired_bails_daily.add_row(empty_row)
 
-        if not self.found_expired_lease_monthly :
+        if not found_expired_lease_monthly :
             self.expired_bails_monthly.add_row(empty_row)
 
         print(self.date_fichier_excel)
 
-        if (self.found_expired_lease_monthly and not self.today_date.day == 1 ) or self.found_expired_lease_daily:
+        if (found_expired_lease_monthly and self.today_date.day == 1 ) or found_expired_lease_daily or True:
             print("send mail")
             self.send_mail()
         return
