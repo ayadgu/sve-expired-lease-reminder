@@ -12,7 +12,7 @@ import sys
 import os
 import time
 from dotenv import load_dotenv
-
+from dateutil.relativedelta import relativedelta
 
 class ReminderBot():
     def __init__(self):
@@ -26,7 +26,7 @@ class ReminderBot():
         self.six_months = timedelta(6*365/12)
         self.height_months = timedelta(8*365/12)
         self.three_years = timedelta(3*365)
-        self.today_date = datetime.today()
+        self.today_date = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
 
         self.PASSWORD_OUTLOOK=os.environ.get("PASSWORD_OUTLOOK")
         self.EMAIL_OUTLOOK=os.environ.get("EMAIL_OUTLOOK")
@@ -38,6 +38,10 @@ class ReminderBot():
         pd.set_option('display.max_rows', None)
         pd.set_option('display.max_columns', None)
         pd.set_option('display.width', None)
+
+        # A surveiller car mauvaise practice
+        # Permet de supress le warning A value is trying to be set on a copy of a slice from a DataFrame
+        pd.options.mode.chained_assignment = None
 
         #--------------------------
         # DF Fichier Adresse des baux
@@ -86,26 +90,30 @@ class ReminderBot():
         df_fichier_baux=df_fichier_baux.rename(columns={3: col_nom_locataire})
 
         df_fichier_baux[col_type_bail] = df_fichier_baux[col_type_bail].astype(str)
-        df_fichier_baux[col_type_bail]=df_fichier_baux[col_type_bail].replace(["0","1","2","3","4","5","6","7","8","9","A","B","C","D","E","F","G","H"],["0 Code Civil ICC","1 Loi Quillot 3 ans","2 Loi Quillot 6 ans","3 Meublé","4 Commercial","5 Professionnel","6 Loi de 48","7 Bail de 6 ans","8 Bail Mehaignerie 3 ans","9 Bail Mehaignerie 8 ans","A Bail Mehaignerie 6 ans","B Bail Loi 06.07.89 3 ans","C Bail Loi 06.07.89 6 ans","D Bail Loi 07.89 3 ans 1/6","E Bail comm. Dg Non Revisable","F Bail SRU","G Bail Derog. (art L.145-5 cc)","H Code Civil IRL"])
+        # df_fichier_baux[col_type_bail]=df_fichier_baux[col_type_bail].replace(["0","1","2","3","4","5","6","7","8","9","A","B","C","D","E","F","G","H"],["0 Code Civil ICC","1 Loi Quillot 3 ans","2 Loi Quillot 6 ans","3 Meublé","4 Commercial","5 Professionnel","6 Loi de 48","7 Bail de 6 ans","8 Bail Mehaignerie 3 ans","9 Bail Mehaignerie 8 ans","A Bail Mehaignerie 6 ans","B Bail Loi 06.07.89 3 ans","C Bail Loi 06.07.89 6 ans","D Bail Loi 07.89 3 ans 1/6","E Bail comm. Dg Non Revisable","F Bail SRU","G Bail Derog. (art L.145-5 cc)","H Code Civil IRL"])
 
 
         df_fichier_baux[col_nom_locataire].bfill(inplace=True)
 
         df_fichier_baux = df_fichier_baux[df_fichier_baux[col_fin_bail].notna()]
         df_fichier_baux = df_fichier_baux[df_fichier_baux[col_numero_bail].notna()]
-
-        df_situation_des_baux=pd.concat([df_fichier_baux[col_numero_bail],df_fichier_baux[col_nom_locataire],df_fichier_baux[col_type_bail],df_fichier_baux[col_fin_bail]], axis=1)
-        print(df_situation_des_baux.head(5))
         
+        df_situation_des_baux=df_fichier_baux[[col_numero_bail,col_nom_locataire,col_type_bail,col_fin_bail]]
+
+        df_situation_des_baux[col_fin_bail] = pd.to_datetime(df_situation_des_baux[col_fin_bail],format= '%d/%m/%Y' )
+
+        df_situation_des_baux.sort_values(by=col_fin_bail,inplace=True,ascending=False)
+
+
         self.df_situation_des_baux = df_situation_des_baux
 
         inner_join = pd.merge(df_situation_des_baux, 
-                            df_adresse_baux_min, 
-                            on =col_numero_bail, 
-                            how ='inner')
-
+                                            df_adresse_baux_min, 
+                                            on =col_numero_bail, 
+                                            how ='inner')
+        inner_join=inner_join.loc[:, [col_numero_bail,col_type_bail,col_nom_locataire,col_adresse_bail,col_fin_bail]]
         self.inner_join=inner_join
-
+        print(inner_join.head(1))
         
 
     def send_mail(self):
@@ -173,50 +181,54 @@ class ReminderBot():
         # Naming Head
         expired_bails_monthly.field_names  = ["Numéro Mandat","Nom Locataire","Adresse Bail","Type Bail","Date Fin"]
         expired_bails_daily.field_names  = ["Numéro Mandat","Nom Locataire","Adresse Bail","Type Bail","Date Fin"]
-        
-        # Sorting 
-        expired_bails_monthly.sortby = 'Date Fin'
-        expired_bails_daily.sortby = 'Date Fin'
-        # Sorting 
+
+        # Align 
         expired_bails_monthly.align = 'r'
         expired_bails_daily.align = 'r'
 
         found_expired_lease_monthly=False
         found_expired_lease_daily=False
 
+        print([["Numero Mandat","Nom Locataire","Adresse Bail","Type Bail"]])
         for indices, row in self.inner_join.iterrows():
-            date = self.inner_join.at[indices,"Fin Bail"]
-            date = datetime.strptime(date, '%d/%m/%Y')
-            print("")
-            numero_bail = self.inner_join.at[indices,"Numero Mandat"]
-            nom_locataire = self.inner_join.at[indices,"Nom Locataire"]
-            adresse_locataire = self.inner_join.at[indices,"Adresse Bail"]
-            type_bail = str(self.inner_join.at[indices,"Type Bail"])
+            print("---------")
+            print(row)
+            print("indices",indices)
+            # date = self.inner_join.at[indices,"Fin Bail"]
+            # # date = datetime.strptime(date, '%Y/%m/%d')
+            # print("")
+            # numero_bail = self.inner_join.at[indices,"Numero Mandat"]
+            # nom_locataire = self.inner_join.at[indices,"Nom Locataire"]
+            # adresse_locataire = self.inner_join.at[indices,"Adresse Bail"]
+            # type_bail = str(self.inner_join.at[indices,"Type Bail"])
             empty_row=["Aucun"]*len(self.inner_join.columns)
 
-            match type_bail :
+            match row["Type Bail"] :
                 # #########
                 # Code bails
                 # # 4 : Prévenir à la date de fin et (date de fin + 3 ans - 6 mois)
                 # 0, 3, B, C, G : Prévenir 8 mois avant date de fin
                 
                 case '4':
-                    if self.today_date == date or self.today_date > date + self.three_years-self.six_months:
+                    if self.today_date == row["Fin Bail"] or self.today_date > row["Fin Bail"] + self.three_years-self.six_months:
                         found_expired_lease_monthly=True
-                        expired_bails_monthly.add_row([numero_bail,nom_locataire,adresse_locataire,type_bail,date.strftime('%d/%m/%Y')])
+                        expired_bails_monthly.add_row(row)
                     
-                    if self.today_date == date or self.today_date == date + self.three_years-self.six_months:
+                    if self.today_date == row["Fin Bail"] or self.today_date == row["Fin Bail"] + self.three_years-self.six_months:
                         found_expired_lease_daily=True
-                        expired_bails_daily.add_row([numero_bail,nom_locataire,adresse_locataire,type_bail,date.strftime('%d/%m/%Y')])
+                        expired_bails_daily.add_row(row)
                 
                 case _:
-                    if self.today_date > date-self.height_months:
+                    if self.today_date > row["Fin Bail"]-self.height_months:
                         found_expired_lease_monthly=True
-                        expired_bails_monthly.add_row([numero_bail,nom_locataire,adresse_locataire,type_bail,date.strftime('%d/%m/%Y')])
+                        expired_bails_monthly.add_row(row)
                         
-                    if self.today_date == date-self.height_months:
+                    if self.today_date == row["Fin Bail"]-self.height_months:
                         found_expired_lease_daily=True
-                        expired_bails_daily.add_row([numero_bail,nom_locataire,adresse_locataire,type_bail,date.strftime('%d/%m/%Y')])
+                        expired_bails_daily.add_row(row)
+
+        expired_bails_daily.sortby = "Date Fin"
+        expired_bails_monthly.sortby = "Date Fin"
 
         self.expired_bails_monthly=expired_bails_monthly
         self.expired_bails_daily=expired_bails_daily
@@ -234,7 +246,7 @@ class ReminderBot():
         if not found_expired_lease_monthly :
             self.expired_bails_monthly.add_row(empty_row)
 
-        print(self.date_fichier_excel)
+        
 
         if (found_expired_lease_monthly and self.today_date.day == 1 ) or found_expired_lease_daily or True:
             print("send mail")
