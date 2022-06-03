@@ -26,7 +26,8 @@ class ReminderBot():
         self.six_months = timedelta(6*365/12)
         self.height_months = timedelta(8*365/12)
         self.three_years = timedelta(3*365)
-        self.today_date = datetime.today().replace(hour=0, minute=0, second=0, microsecond=0)
+        self.today_date = datetime.today().date()
+
 
         self.PASSWORD_OUTLOOK=os.environ.get("PASSWORD_OUTLOOK")
         self.EMAIL_OUTLOOK=os.environ.get("EMAIL_OUTLOOK")
@@ -83,6 +84,11 @@ class ReminderBot():
         col_type_bail =  'Type Bail'
         col_numero_bail =  'Numero Mandat'
         col_nom_locataire =  'Nom Locataire'
+        
+        self.col_fin_bail=col_fin_bail 
+        self.col_type_bail=col_type_bail 
+        self.col_numero_bail=col_numero_bail 
+        self.col_nom_locataire=col_nom_locataire 
 
         df_fichier_baux=df_fichier_baux.rename(columns={19: col_fin_bail})
         df_fichier_baux=df_fichier_baux.rename(columns={17: col_type_bail})
@@ -90,7 +96,6 @@ class ReminderBot():
         df_fichier_baux=df_fichier_baux.rename(columns={3: col_nom_locataire})
 
         df_fichier_baux[col_type_bail] = df_fichier_baux[col_type_bail].astype(str)
-        # df_fichier_baux[col_type_bail]=df_fichier_baux[col_type_bail].replace(["0","1","2","3","4","5","6","7","8","9","A","B","C","D","E","F","G","H"],["0 Code Civil ICC","1 Loi Quillot 3 ans","2 Loi Quillot 6 ans","3 Meublé","4 Commercial","5 Professionnel","6 Loi de 48","7 Bail de 6 ans","8 Bail Mehaignerie 3 ans","9 Bail Mehaignerie 8 ans","A Bail Mehaignerie 6 ans","B Bail Loi 06.07.89 3 ans","C Bail Loi 06.07.89 6 ans","D Bail Loi 07.89 3 ans 1/6","E Bail comm. Dg Non Revisable","F Bail SRU","G Bail Derog. (art L.145-5 cc)","H Code Civil IRL"])
 
 
         df_fichier_baux[col_nom_locataire].bfill(inplace=True)
@@ -100,7 +105,9 @@ class ReminderBot():
         
         df_situation_des_baux=df_fichier_baux[[col_numero_bail,col_nom_locataire,col_type_bail,col_fin_bail]]
 
-        df_situation_des_baux[col_fin_bail] = pd.to_datetime(df_situation_des_baux[col_fin_bail],format= '%d/%m/%Y' )
+        df_situation_des_baux[col_fin_bail] = pd.to_datetime(df_situation_des_baux[col_fin_bail],format= '%d/%m/%Y').dt.date
+
+
 
         df_situation_des_baux.sort_values(by=col_fin_bail,inplace=True,ascending=False)
 
@@ -112,23 +119,37 @@ class ReminderBot():
                                             on =col_numero_bail, 
                                             how ='inner')
         inner_join=inner_join.loc[:, [col_numero_bail,col_type_bail,col_nom_locataire,col_adresse_bail,col_fin_bail]]
+
+
+        inner_join=self.delete_unwanted_rows(inner_join,col_type_bail,col_fin_bail)
+        inner_join[col_type_bail]=self.format_type_bail(inner_join,col_type_bail)
         self.inner_join=inner_join
-        print(inner_join.head(1))
+
+    def format_date_us_to_eur(self,df,col):
+        df[col] = pd.to_datetime(df[col], errors='coerce')
+        return df[col].dt.strftime('%d-%m-%Y')
+
+    def format_type_bail(self,df,col):
+        return df[col].replace(["0","1","2","3","4","5","6","7","8","9","A","B","C","D","E","F","G","H"],["0 Code Civil ICC","1 Loi Quillot 3 ans","2 Loi Quillot 6 ans","3 Meublé","4 Commercial","5 Professionnel","6 Loi de 48","7 Bail de 6 ans","8 Bail Mehaignerie 3 ans","9 Bail Mehaignerie 8 ans","A Bail Mehaignerie 6 ans","B Bail Loi 06.07.89 3 ans","C Bail Loi 06.07.89 6 ans","D Bail Loi 07.89 3 ans 1/6","E Bail comm. Dg Non Revisable","F Bail SRU","G Bail Derog. (art L.145-5 cc)","H Code Civil IRL"])
         
+    def delete_unwanted_rows(self,df,col_type_bail,col_fin_bail):
+        df.drop(df[(df[col_type_bail] == "4") & (self.today_date < df[col_fin_bail] + self.three_years-self.six_months) ].index, inplace=True)
+        df.drop(df[(df[col_type_bail] != "4") & (self.today_date < df[col_fin_bail]-self.height_months)].index, inplace=True)
+        return df
 
     def send_mail(self):
         text = f"""
         <h6>Ceci est un message automatique.</h6>
 
         <h2>Baux arrivés à expiration:</h2>
-
-        {self.expired_bails_monthly.get_html_string()}
-        {self.expired_bails_daily.get_html_string()}
+        {self.inner_join.to_html(index=False,classes=["table-bordered", "table-striped", "table-hover"])}
 
         Cordialement
         """
 
         html = f"""
+        <html>
+              
         <html>
             <body>
                 <p>Ceci est un message automatique.</p>
@@ -136,7 +157,7 @@ class ReminderBot():
                 {self.expired_bails_daily.get_html_string()}
                 <br/>
                 <h3>Baux bientôt ou déjà expirés à ce jour :</h3>
-                {self.expired_bails_monthly.get_html_string()}
+                {self.inner_join.to_html(index=False)}
                 <br/>
                 <p>Le fichier Excel <b>{self.path_fichier_excel}</b> utilisé pour ce rappel date du <b>{self.date_fichier_excel}</b>.</p>
                 <p>
@@ -190,17 +211,7 @@ class ReminderBot():
         found_expired_lease_daily=False
 
         print([["Numero Mandat","Nom Locataire","Adresse Bail","Type Bail"]])
-        for indices, row in self.inner_join.iterrows():
-            print("---------")
-            print(row)
-            print("indices",indices)
-            # date = self.inner_join.at[indices,"Fin Bail"]
-            # # date = datetime.strptime(date, '%Y/%m/%d')
-            # print("")
-            # numero_bail = self.inner_join.at[indices,"Numero Mandat"]
-            # nom_locataire = self.inner_join.at[indices,"Nom Locataire"]
-            # adresse_locataire = self.inner_join.at[indices,"Adresse Bail"]
-            # type_bail = str(self.inner_join.at[indices,"Type Bail"])
+        for _, row in self.inner_join.iterrows():
             empty_row=["Aucun"]*len(self.inner_join.columns)
 
             match row["Type Bail"] :
@@ -210,31 +221,20 @@ class ReminderBot():
                 # 0, 3, B, C, G : Prévenir 8 mois avant date de fin
                 
                 case '4':
-                    if self.today_date == row["Fin Bail"] or self.today_date > row["Fin Bail"] + self.three_years-self.six_months:
-                        found_expired_lease_monthly=True
-                        expired_bails_monthly.add_row(row)
-                    
                     if self.today_date == row["Fin Bail"] or self.today_date == row["Fin Bail"] + self.three_years-self.six_months:
                         found_expired_lease_daily=True
                         expired_bails_daily.add_row(row)
                 
                 case _:
-                    if self.today_date > row["Fin Bail"]-self.height_months:
-                        found_expired_lease_monthly=True
-                        expired_bails_monthly.add_row(row)
-                        
                     if self.today_date == row["Fin Bail"]-self.height_months:
                         found_expired_lease_daily=True
                         expired_bails_daily.add_row(row)
 
         expired_bails_daily.sortby = "Date Fin"
-        expired_bails_monthly.sortby = "Date Fin"
 
-        self.expired_bails_monthly=expired_bails_monthly
         self.expired_bails_daily=expired_bails_daily
 
         print("expired_bails_daily : \n",self.expired_bails_daily)
-        print("expired_bails_monthly : \n",self.expired_bails_monthly)
         print(self.today_date.day == 1, "first day")
 
         print("found_expired_lease_monthly",found_expired_lease_monthly)
@@ -242,16 +242,15 @@ class ReminderBot():
 
         if not found_expired_lease_daily :
             self.expired_bails_daily.add_row(empty_row)
-
-        if not found_expired_lease_monthly :
-            self.expired_bails_monthly.add_row(empty_row)
-
         
+        self.inner_join["Fin Bail"]=self.format_date_us_to_eur(self.inner_join,"Fin Bail")
 
-        if (found_expired_lease_monthly and self.today_date.day == 1 ) or found_expired_lease_daily or True:
-            print("send mail")
+
+        if (self.today_date in self.inner_join[self.col_fin_bail].values)\
+             or self.today_date.day == 1\
+            or 1 :
+            print("email sent")
             self.send_mail()
-        return
 
 def main():
     print("Lancement de l'application, veuillez patienter...")
