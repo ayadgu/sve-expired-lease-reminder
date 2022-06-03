@@ -24,7 +24,7 @@ class ReminderBot():
         os.path.expanduser('~')
 
         self.six_months = timedelta(6*365/12)
-        self.height_months = timedelta(8*365/12)
+        self.eight_months = timedelta(8*365/12)
         self.three_years = timedelta(3*365)
         self.today_date = datetime.today().date()
 
@@ -120,10 +120,12 @@ class ReminderBot():
                                             how ='inner')
         inner_join=inner_join.loc[:, [col_numero_bail,col_type_bail,col_nom_locataire,col_adresse_bail,col_fin_bail]]
 
-
         inner_join=self.delete_unwanted_rows(inner_join,col_type_bail,col_fin_bail)
+
         inner_join[col_type_bail]=self.format_type_bail(inner_join,col_type_bail)
         self.inner_join=inner_join
+
+
 
     def format_date_us_to_eur(self,df,col):
         df[col] = pd.to_datetime(df[col], errors='coerce')
@@ -134,7 +136,7 @@ class ReminderBot():
         
     def delete_unwanted_rows(self,df,col_type_bail,col_fin_bail):
         df.drop(df[(df[col_type_bail] == "4") & (self.today_date < df[col_fin_bail] + self.three_years-self.six_months) ].index, inplace=True)
-        df.drop(df[(df[col_type_bail] != "4") & (self.today_date < df[col_fin_bail]-self.height_months)].index, inplace=True)
+        df.drop(df[(df[col_type_bail] != "4") & (self.today_date < df[col_fin_bail]-self.eight_months)].index, inplace=True)
         return df
 
     def send_mail(self):
@@ -154,7 +156,7 @@ class ReminderBot():
             <body>
                 <p>Ceci est un message automatique.</p>
                 <h3>Baux bientôt expirés depuis aujourd'hui exactement :</h3>
-                {self.expired_bails_daily.get_html_string()}
+                {self.expired_bails_daily.to_html(index=False)}
                 <br/>
                 <h3>Baux bientôt ou déjà expirés à ce jour :</h3>
                 {self.inner_join.to_html(index=False)}
@@ -172,7 +174,7 @@ class ReminderBot():
         text=html
         msg = MIMEMultipart('alternative')
         # msg = EmailMessage()
-        # msg.set_content((self.expired_bails_daily.get_html_string()))
+        # msg.set_content((self.expired_bails_daily.to_html(index=False)))
         msg["Subject"] = "Rappel automatique - Baux bientôt arrivés à expiration"
         msg["From"] = self.EMAIL_OUTLOOK
         msg["To"] = self.EMAIL_DEST
@@ -195,59 +197,41 @@ class ReminderBot():
             smtp.quit()
 
     def apply(self):
+        self.today_date+= relativedelta(months=6)
+
         # Init PrettyTable
-        expired_bails_monthly = PrettyTable()
-        expired_bails_daily = PrettyTable()
+        today_expired_df=self.inner_join[\
+            ((self.inner_join["Type Bail"]=="4") &\
+                (\
+                    (self.today_date==self.inner_join["Fin Bail"])|\
+                    ((self.today_date==self.inner_join["Fin Bail"] + self.three_years-self.six_months))\
+                )\
+            )|\
+            ((self.inner_join["Type Bail"]!="4") &\
+            (\
+                (self.today_date==self.inner_join["Fin Bail"])|\
+                (self.today_date==self.inner_join["Fin Bail"]-self.eight_months)\
+            )\
+            )
+        ]
+        
+        if today_expired_df:
+            print("found_expired_lease_daily",True)
+        else:
+            print("found_expired_lease_daily",False)
 
-        # Naming Head
-        expired_bails_monthly.field_names  = ["Numéro Mandat","Nom Locataire","Adresse Bail","Type Bail","Date Fin"]
-        expired_bails_daily.field_names  = ["Numéro Mandat","Nom Locataire","Adresse Bail","Type Bail","Date Fin"]
-
-        # Align 
-        expired_bails_monthly.align = 'r'
-        expired_bails_daily.align = 'r'
-
-        found_expired_lease_monthly=False
-        found_expired_lease_daily=False
-
-        print([["Numero Mandat","Nom Locataire","Adresse Bail","Type Bail"]])
-        for _, row in self.inner_join.iterrows():
+        if not today_expired_df :
             empty_row=["Aucun"]*len(self.inner_join.columns)
-
-            match row["Type Bail"] :
-                # #########
-                # Code bails
-                # # 4 : Prévenir à la date de fin et (date de fin + 3 ans - 6 mois)
-                # 0, 3, B, C, G : Prévenir 8 mois avant date de fin
-                
-                case '4':
-                    if self.today_date == row["Fin Bail"] or self.today_date == row["Fin Bail"] + self.three_years-self.six_months:
-                        found_expired_lease_daily=True
-                        expired_bails_daily.add_row(row)
-                
-                case _:
-                    if self.today_date == row["Fin Bail"]-self.height_months:
-                        found_expired_lease_daily=True
-                        expired_bails_daily.add_row(row)
-
-        expired_bails_daily.sortby = "Date Fin"
-
-        self.expired_bails_daily=expired_bails_daily
-
-        print("expired_bails_daily : \n",self.expired_bails_daily)
-        print(self.today_date.day == 1, "first day")
-
-        print("found_expired_lease_monthly",found_expired_lease_monthly)
-        print("found_expired_lease_daily",found_expired_lease_daily)
-
-        if not found_expired_lease_daily :
-            self.expired_bails_daily.add_row(empty_row)
+            today_expired_df.append(empty_row)
         
         self.inner_join["Fin Bail"]=self.format_date_us_to_eur(self.inner_join,"Fin Bail")
 
+        print("today_expired_df : \n",today_expired_df)
+        self.today_expired_df=today_expired_df
 
         if (self.today_date in self.inner_join[self.col_fin_bail].values)\
-             or self.today_date.day == 1\
+            or self.today_date.day == 1\
+            or today_expired_df\
             or 1 :
             print("email sent")
             self.send_mail()
