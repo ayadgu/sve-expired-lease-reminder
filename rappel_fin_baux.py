@@ -33,8 +33,6 @@ class ReminderBot():
         self.EMAIL_OUTLOOK=os.environ.get("EMAIL_OUTLOOK")
         self.EMAIL_DEST=os.environ.get("EMAIL_DEST")
 
-        
-
     def initDataFrame(self):
         pd.set_option('display.max_rows', None)
         pd.set_option('display.max_columns', None)
@@ -142,21 +140,20 @@ class ReminderBot():
     def send_mail(self):
         text = f"""
         <h6>Ceci est un message automatique.</h6>
-
-        <h2>Baux arrivés à expiration:</h2>
-        {self.inner_join.to_html(index=False,classes=["table-bordered", "table-striped", "table-hover"])}
-
+        <h3>Baux bientôt expirés depuis aujourd'hui exactement :</h3>
+        {self.daily_expired_df.to_html(index=False)}
+        <br/>
+        <h3>Baux bientôt ou déjà expirés à ce jour :</h3>
+        {self.inner_join.to_html(index=False)}
         Cordialement
         """
 
         html = f"""
         <html>
-              
-        <html>
             <body>
                 <p>Ceci est un message automatique.</p>
                 <h3>Baux bientôt expirés depuis aujourd'hui exactement :</h3>
-                {self.expired_bails_daily.to_html(index=False)}
+                {self.daily_expired_df.to_html(index=False)}
                 <br/>
                 <h3>Baux bientôt ou déjà expirés à ce jour :</h3>
                 {self.inner_join.to_html(index=False)}
@@ -197,10 +194,11 @@ class ReminderBot():
             smtp.quit()
 
     def apply(self):
-        self.today_date+= relativedelta(months=6)
-
-        # Init PrettyTable
-        today_expired_df=self.inner_join[\
+        # On applique une condition selon si le mandat est de type 4 ou différent de 4
+        # Code bails
+        #     # # 4 : Prévenir à la date de fin et (date de fin + 3 ans - 6 mois)
+        #     # 0, 3, B, C, G : Prévenir 8 mois avant date de fin
+        daily_expired_df=self.inner_join[\
             ((self.inner_join["Type Bail"]=="4") &\
                 (\
                     (self.today_date==self.inner_join["Fin Bail"])|\
@@ -215,24 +213,27 @@ class ReminderBot():
             )
         ]
         
-        if today_expired_df:
+        if not daily_expired_df.empty:
             print("found_expired_lease_daily",True)
         else:
             print("found_expired_lease_daily",False)
+            # empty_row=["Aucun"]*len(self.inner_join.columns)
+            # pd.concat([daily_expired_df,empty_row])
 
-        if not today_expired_df :
-            empty_row=["Aucun"]*len(self.inner_join.columns)
-            today_expired_df.append(empty_row)
-        
+
         self.inner_join["Fin Bail"]=self.format_date_us_to_eur(self.inner_join,"Fin Bail")
 
-        print("today_expired_df : \n",today_expired_df)
-        self.today_expired_df=today_expired_df
+        print("self.inner_join : \n",self.inner_join)
+        print("daily_expired_df : \n",daily_expired_df)
+        self.daily_expired_df=daily_expired_df
+        
 
-        if (self.today_date in self.inner_join[self.col_fin_bail].values)\
-            or self.today_date.day == 1\
-            or today_expired_df\
-            or 1 :
+        # Si on est le premier du mois
+        # OU le daily tableau des contrats arrivés a expiration n'est pas vide 
+        # Alors on envoie un mail
+        if self.today_date.day == 1\
+            or not daily_expired_df.empty\
+            or 1:
             print("email sent")
             self.send_mail()
 
